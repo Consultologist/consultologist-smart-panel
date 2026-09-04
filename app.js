@@ -98,6 +98,23 @@ $("launchBtn").addEventListener("click", async () => {
     if (params.has("error")) {
       log("authorize returned error=" + params.get("error") + " description=" + (params.get("error_description") || ""));
     }
+    // No fresh SMART return, but a launch earlier THIS tab may have left its
+    // tokens in sessionStorage (they survive a reload, are burned on close).
+    // Restore them so link/send still work after an incidental reload.
+    const savedAccess = sessionStorage.getItem("epic-access-token");
+    if (savedAccess) {
+      accessToken = savedAccess;
+      $("docsSection").hidden = false;
+      const savedPatient = sessionStorage.getItem("epic-patient");
+      if (savedPatient) $("patientId").value = savedPatient;
+    }
+    const savedId = sessionStorage.getItem("epic-id-token");
+    if (savedId) {
+      epicIdToken = savedId;
+      await showIdToken(savedId);
+      refreshLinkButton();
+      log("restored the Epic id_token from this tab — ready to link");
+    }
     return;
   }
 
@@ -133,6 +150,7 @@ $("launchBtn").addEventListener("click", async () => {
   }
 
   accessToken = token.access_token;
+  sessionStorage.setItem("epic-access-token", accessToken); // survives a same-tab reload; burned on close
 
   // The SHAPE, never the tokens: field names, lengths, expiry, context.
   const shape = {};
@@ -147,11 +165,13 @@ $("launchBtn").addEventListener("click", async () => {
 
   if (token.patient) {
     $("patientId").value = token.patient;
+    sessionStorage.setItem("epic-patient", token.patient);
   }
   $("docsSection").hidden = false;
 
   if (token.id_token) {
     epicIdToken = token.id_token;
+    sessionStorage.setItem("epic-id-token", epicIdToken); // the link step reads this
     await showIdToken(token.id_token);
     refreshLinkButton();
   } else {
@@ -165,6 +185,18 @@ const apiBase = () => $("apiBase").value.trim().replace(/\/$/, "");
 function refreshLinkButton() {
   $("linkEpicBtn").disabled = !(entraSignedIn && epicIdToken);
 }
+
+// If MSAL already holds a signed-in account (cached this browser), reflect it
+// without a fresh popup — pairs with the restored Epic token so the whole
+// proof survives a reload.
+window.addEventListener("consultologist-entra-ready", (event) => {
+  const who = event.detail?.account;
+  if (who && !entraSignedIn) {
+    entraSignedIn = true;
+    $("entraResult").textContent = "Signed in to Consultologist as " + who;
+    refreshLinkButton();
+  }
+});
 
 $("entraSignInBtn").addEventListener("click", async () => {
   try {

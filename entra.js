@@ -8,16 +8,35 @@
 // deprecated at v3.0.0, so a buildless static page consumes it as ESM.
 import { PublicClientApplication } from "https://esm.sh/@azure/msal-browser@5";
 
+const CONFIG_KEY = "smart-panel-config"; // shared with app.js's persistence
+
 let pca = null;
 let account = null;
 let pcaKey = null;   // the (authority|clientId) the current instance was built for
 let signingIn = false;
 
+// The panel's own Entra authority + client id, as saved by app.js. Read here
+// too so the module can build MSAL at load — including when this page is the
+// one MSAL opened in the popup, where there is no click to trigger it.
+function savedEntraConfig() {
+  try {
+    const c = JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}");
+    return { authority: c.entraAuthority, clientId: c.entraClientId };
+  } catch {
+    return {};
+  }
+}
+
 // Build the PublicClientApplication ONCE per config (not per click): a fresh
 // instance each click, while a prior popup's interaction lock still sits in
-// sessionStorage, is what raised interaction_in_progress. initialize() +
-// handleRedirectPromise() settle any half-finished interaction so the lock
-// is cleared before we start a new one.
+// storage, is what raised interaction_in_progress.
+//
+// cacheLocation is localStorage, not sessionStorage, on purpose: the popup
+// MSAL opens is a separate window and does NOT share sessionStorage with the
+// opener, so the interaction request the opener wrote would be invisible to
+// the popup and the handshake could never complete — the popup would just
+// re-render this app and never close. localStorage is shared same-origin, so
+// the popup sees the request, finishes, and closes.
 async function ensurePca(authority, clientId) {
   const key = authority + "|" + clientId;
   if (pca && pcaKey === key) {
@@ -25,10 +44,14 @@ async function ensurePca(authority, clientId) {
   }
   pca = new PublicClientApplication({
     auth: { clientId, authority, redirectUri: window.location.origin + window.location.pathname },
-    cache: { cacheLocation: "sessionStorage" } // per-tab, gone on close
+    cache: { cacheLocation: "localStorage" }
   });
   await pca.initialize();
-  await pca.handleRedirectPromise();  // clears any stale interaction state
+  // Settle any redirect/popup response present on this load. When this page
+  // is the one loaded INSIDE the popup at the redirectUri, this is the call
+  // that hands the code back to the opener and lets MSAL close the popup;
+  // without it the popup just shows the app with #code= in the address bar.
+  await pca.handleRedirectPromise();
   pcaKey = key;
   const existing = pca.getAllAccounts();
   if (existing.length > 0) {
@@ -71,7 +94,30 @@ window.consultologistEntra = {
       const interactive = await pca.acquireTokenPopup(request);
       return interactive.accessToken;
     }
+  },
+
+  // The signed-in account, if MSAL already holds one (cached from a prior
+  // sign-in this browser). Lets app.js restore the signed-in UI after a
+  // reload without a fresh popup.
+  currentAccountName() {
+    return account ? (account.username ?? account.name ?? "signed in") : null;
   }
 };
 
-window.dispatchEvent(new Event("consultologist-entra-ready"));
+// At load — in the main window AND in the popup MSAL opens — build MSAL from
+// the saved config and settle any redirect response. In the popup this is
+// what closes it; in the main window it rehydrates a cached account so the
+// signed-in state survives a reload.
+(async () => {
+  const { authority, clientId } = savedEntraConfig();
+  if (authority && clientId) {
+    try {
+      await ensurePca(authority, clientId);
+    } catch (error) {
+      console.warn("Entra init at load failed (will retry on Sign in):", error);
+    }
+  }
+  window.dispatchEvent(new CustomEvent("consultologist-entra-ready", {
+    detail: { account: window.consultologistEntra.currentAccountName() }
+  }));
+})();
