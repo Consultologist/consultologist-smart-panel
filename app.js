@@ -20,7 +20,9 @@ let smartConfig = null;
 let accessToken = null;
 
 // --- config persistence (convenience only) ---
-for (const key of ["fhirBase", "clientId", "scopes"]) {
+// Scopes are NOT persisted — the prefill is the source of truth, so a
+// stale truncated edit can never override it (a #190 spike lesson).
+for (const key of ["fhirBase", "clientId"]) {
   const el = $(key);
   const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}");
   if (saved[key]) el.value = saved[key];
@@ -82,6 +84,7 @@ $("launchBtn").addEventListener("click", async () => {
   authorize.searchParams.set("code_challenge", challenge);
   authorize.searchParams.set("code_challenge_method", "S256");
 
+  log("scope sent: " + $("scopes").value.trim());
   log("redirecting to authorize…");
   window.location.assign(authorize.toString());
 });
