@@ -66,11 +66,31 @@
     <div id="docsResult"></div>
   </section>
 
+  <section id="entraSection">
+    <h2>5 &middot; Consultologist (the #654 leg — Entra + link + send)</h2>
+    <label>API base URL
+      <input type="text" id="apiBase" placeholder="https://…azurewebsites.net/api" />
+    </label>
+    <label>Entra authority
+      <input type="text" id="entraAuthority" placeholder="https://login.microsoftonline.com/&lt;tenant-id&gt;" />
+    </label>
+    <label>Entra client ID (the panel's own registration)
+      <input type="text" id="entraClientId" placeholder="the panel app's Entra client id" />
+    </label>
+    <label>API scope
+      <input type="text" id="apiScope" placeholder="api://&lt;api-client-id&gt;/access_as_user" />
+    </label>
+    <button id="entraSignInBtn">Sign in to Consultologist</button>
+    <button id="linkEpicBtn" disabled>Link this Epic identity</button>
+    <div id="entraResult" class="muted"></div>
+  </section>
+
   <section>
     <h2>Log</h2>
     <pre id="log"></pre>
   </section>
 
+  <script type="module" src="entra.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

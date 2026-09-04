@@ -18,11 +18,13 @@ const REDIRECT_URI = window.location.origin + window.location.pathname;
 
 let smartConfig = null;
 let accessToken = null;
+let epicIdToken = null;   // #654: the SMART id_token, POSTed to the link endpoint
+let entraSignedIn = false;
 
 // --- config persistence (convenience only) ---
 // Scopes are NOT persisted — the prefill is the source of truth, so a
 // stale truncated edit can never override it (a #190 spike lesson).
-for (const key of ["fhirBase", "clientId"]) {
+for (const key of ["fhirBase", "clientId", "apiBase", "entraAuthority", "entraClientId", "apiScope"]) {
   const el = $(key);
   const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}");
   if (saved[key]) el.value = saved[key];
@@ -149,11 +151,78 @@ $("launchBtn").addEventListener("click", async () => {
   $("docsSection").hidden = false;
 
   if (token.id_token) {
+    epicIdToken = token.id_token;
     await showIdToken(token.id_token);
+    refreshLinkButton();
   } else {
     log("no id_token in the response (openid scope not granted?)");
   }
 })();
+
+// --- #654: the Consultologist (Entra) leg — sign in, link, send ---
+const apiBase = () => $("apiBase").value.trim().replace(/\/$/, "");
+
+function refreshLinkButton() {
+  $("linkEpicBtn").disabled = !(entraSignedIn && epicIdToken);
+}
+
+$("entraSignInBtn").addEventListener("click", async () => {
+  try {
+    if (!window.consultologistEntra) {
+      log("Entra module not loaded yet — wait a moment and retry.");
+      return;
+    }
+    const who = await window.consultologistEntra.signIn(
+      $("entraAuthority").value.trim(), $("entraClientId").value.trim());
+    entraSignedIn = true;
+    $("entraResult").textContent = "Signed in to Consultologist as " + who;
+    log("Entra sign-in ok: " + who);
+    refreshLinkButton();
+  } catch (error) {
+    log("Entra sign-in FAILED: " + error);
+  }
+});
+
+$("linkEpicBtn").addEventListener("click", async () => {
+  try {
+    const apiToken = await window.consultologistEntra.getApiToken($("apiScope").value.trim());
+    log("POST " + apiBase() + "/Account/Epic/Link");
+    const response = await fetch(apiBase() + "/Account/Epic/Link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + apiToken },
+      body: JSON.stringify({ idToken: epicIdToken })
+    });
+    if (response.ok) {
+      const body = await response.json();
+      $("entraResult").innerHTML = "Epic identity linked: <strong>" + esc(body.FhirUser ?? body.fhirUser) + "</strong>";
+      log("epic linked: " + (body.FhirUser ?? body.fhirUser));
+    } else {
+      const body = await response.text();
+      $("entraResult").innerHTML = "<span class=\"error\">Link refused (HTTP " + esc(response.status) + ")</span>";
+      log("link refused: HTTP " + response.status + " " + body);
+    }
+  } catch (error) {
+    log("link FAILED: " + error);
+  }
+});
+
+// A per-document "send to Consultologist" — the #654 leg-2 document road.
+// Posts the fetched Epic bytes to the preview door under the Entra bearer,
+// proving an Epic document parses on the engine's rails (post-#655).
+window.sendDocumentToConsultologist = async function (bytes, contentType) {
+  const apiToken = await window.consultologistEntra.getApiToken($("apiScope").value.trim());
+  log("POST " + apiBase() + "/DocumentExtractions (" + bytes.byteLength + " bytes, " + contentType + ")");
+  const response = await fetch(apiBase() + "/DocumentExtractions", {
+    method: "POST",
+    headers: { "Content-Type": contentType, Authorization: "Bearer " + apiToken },
+    body: bytes
+  });
+  const outcome = response.ok
+    ? "extracted (" + (await response.json()).Text.length + " chars)"
+    : "HTTP " + response.status + " " + (await response.text());
+  log("document → Consultologist: " + outcome);
+  return outcome;
+};
 
 // --- id_token: decode + JWKS verify ---
 function decodeJwtPart(part) {
@@ -251,5 +320,20 @@ async function fetchAttachment(resource) {
   link.download = "epic-document-" + (resource.id || "unknown");
   link.textContent = "Save the bytes";
   $("fetchResult").appendChild(link);
+
+  // #654 leg 2: send the very bytes to Consultologist (needs the Entra
+  // sign-in above), proving an Epic document parses on the engine's rails.
+  const send = document.createElement("button");
+  send.textContent = "Send to Consultologist";
+  send.className = "doc-fetch";
+  send.addEventListener("click", async () => {
+    const outcome = await window.sendDocumentToConsultologist(bytes, contentType);
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = "Consultologist: " + outcome;
+    $("fetchResult").appendChild(note);
+  });
+  $("fetchResult").appendChild(send);
+
   log("attachment fetched: " + bytes.byteLength + " bytes, " + contentType);
 }

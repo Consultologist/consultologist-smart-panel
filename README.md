@@ -29,6 +29,31 @@ launch-bound access is the posture (#654's stated boundary).
    offered.
 5. Save; changes take up to **1 hour** to sync to the sandbox.
 
+## The Consultologist (Entra) leg — #654
+
+To link the Epic identity and send a document to Consultologist, the panel
+also signs the clinician into Consultologist (Entra) — a **second** sign-in
+beside the Epic SMART one (the #611 satellite model: the panel presents the
+clinician's own delegated `access_as_user` token; the Epic identity is
+proof, never a bearer credential). The Entra leg uses MSAL in a popup,
+loaded as an ES module from a CDN (MSAL's UMD/script-tag build was
+deprecated at v3.0.0, so a buildless page consumes it as ESM).
+
+**Operator step — the panel's own Entra registration (once, the #611
+satellite recipe):** register a public-client app (SPA redirect
+`http://localhost:4180/`), create its service principal, grant it the API's
+delegated `access_as_user` tenant-wide, append it to the API registration's
+`api.preAuthorizedApplications` (read-modify-write, never replace), and add
+`http://localhost:4180` to the API's `Cors__AllowedOrigins`. All reversible.
+
+Then, in section 5 of the panel: API base URL, the Entra authority
+(`https://login.microsoftonline.com/<tenant>`), the panel's Entra client
+id, and the API scope (`api://<api-client-id>/access_as_user`); **Sign in
+to Consultologist**, then **Link this Epic identity** (after a SMART launch
+has produced an id_token). Each fetched document offers **Send to
+Consultologist**, which posts its bytes to the API under the Entra bearer.
+
+## Running
 ## Running
 
 ```bash
