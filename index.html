@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Consultologist SMART panel (spike)</title>
+  <style>
+    :root { color-scheme: light; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1.5rem; background: #fafafa; color: #1a1a1a; max-width: 60rem; }
+    h1 { font-size: 1.2rem; }
+    section { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+    h2 { font-size: 1rem; margin-top: 0; }
+    label { display: block; font-size: 0.85rem; margin-top: 0.5rem; }
+    input[type=text] { width: 100%; box-sizing: border-box; padding: 0.35rem; font: inherit; }
+    button { font: inherit; padding: 0.4rem 0.9rem; margin-top: 0.75rem; cursor: pointer; }
+    pre { background: #f4f4f4; border-radius: 6px; padding: 0.75rem; overflow-x: auto; font-size: 0.8rem; white-space: pre-wrap; word-break: break-all; }
+    .muted { color: #666; font-size: 0.85rem; }
+    .error { color: #a4262c; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+    td, th { border-bottom: 1px solid #eee; padding: 0.35rem 0.5rem; text-align: left; vertical-align: top; }
+    .doc-fetch { margin-top: 0; padding: 0.2rem 0.6rem; }
+  </style>
+</head>
+<body>
+  <h1>Consultologist SMART panel — #190 sandbox spike</h1>
+  <p class="muted">
+    Standalone SMART on FHIR launch (authorization code + PKCE), read-only:
+    id_token identity, launch context, DocumentReference &rarr; Binary. No
+    tokens leave this page; nothing is stored beyond this browser tab and
+    the config below.
+  </p>
+
+  <section id="config">
+    <h2>1 &middot; Configuration</h2>
+    <label>FHIR base URL (R4)
+      <input type="text" id="fhirBase" placeholder="https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4" />
+    </label>
+    <label>Client ID (non-production)
+      <input type="text" id="clientId" placeholder="the non-production client id from fhir.epic.com" />
+    </label>
+    <label>Scopes
+      <input type="text" id="scopes" value="openid fhirUser launch/patient patient/DocumentReference.read patient/Binary.read" />
+    </label>
+    <button id="discoverBtn">Discover (.well-known/smart-configuration)</button>
+    <button id="launchBtn" disabled>Launch (authorize + PKCE)</button>
+    <pre id="discovery" hidden></pre>
+  </section>
+
+  <section id="tokenSection" hidden>
+    <h2>2 &middot; Token response (shape)</h2>
+    <pre id="tokenShape"></pre>
+  </section>
+
+  <section id="idTokenSection" hidden>
+    <h2>3 &middot; id_token (the #654 leg-1 evidence)</h2>
+    <div id="jwksResult" class="muted"></div>
+    <pre id="idTokenClaims"></pre>
+  </section>
+
+  <section id="docsSection" hidden>
+    <h2>4 &middot; DocumentReferences (the #654 leg-2 evidence)</h2>
+    <label>Patient ID (from launch context, or enter a sandbox test patient)
+      <input type="text" id="patientId" />
+    </label>
+    <button id="listDocsBtn">List DocumentReferences</button>
+    <div id="docsResult"></div>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <pre id="log"></pre>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
