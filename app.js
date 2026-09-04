@@ -194,6 +194,7 @@ window.addEventListener("consultologist-entra-ready", (event) => {
   if (who && !entraSignedIn) {
     entraSignedIn = true;
     $("entraResult").textContent = "Signed in to Consultologist as " + who;
+    log("Entra sign-in ok: " + who);
     refreshLinkButton();
   }
 });
@@ -204,12 +205,18 @@ $("entraSignInBtn").addEventListener("click", async () => {
       log("Entra module not loaded yet — wait a moment and retry.");
       return;
     }
-    const who = await window.consultologistEntra.signIn(
-      $("entraAuthority").value.trim(), $("entraClientId").value.trim());
-    entraSignedIn = true;
-    $("entraResult").textContent = "Signed in to Consultologist as " + who;
-    log("Entra sign-in ok: " + who);
-    refreshLinkButton();
+    // Persist the Entra config now so entra.js can rebuild MSAL with the same
+    // authority/client id on the load that follows the redirect back.
+    const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}");
+    saved.entraAuthority = $("entraAuthority").value.trim();
+    saved.entraClientId = $("entraClientId").value.trim();
+    saved.apiScope = $("apiScope").value.trim();
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(saved));
+
+    log("redirecting to Entra sign-in…");
+    await window.consultologistEntra.signIn(saved.entraAuthority, saved.entraClientId);
+    // Control does not return — the tab navigates to Entra and back; the
+    // signed-in state is restored by the consultologist-entra-ready handler.
   } catch (error) {
     log("Entra sign-in FAILED: " + error);
   }

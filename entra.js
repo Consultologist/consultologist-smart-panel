@@ -43,14 +43,20 @@ async function ensurePca(authority, clientId) {
     return pca;
   }
   pca = new PublicClientApplication({
-    auth: { clientId, authority, redirectUri: window.location.origin + window.location.pathname },
+    auth: {
+      clientId, authority,
+      redirectUri: window.location.origin + window.location.pathname,
+      // Process the response hash in place; don't bounce back to the
+      // request URL (which would double-navigate this static page).
+      navigateToLoginRequestUrl: false
+    },
     cache: { cacheLocation: "localStorage" }
   });
   await pca.initialize();
-  // Settle any redirect/popup response present on this load. When this page
-  // is the one loaded INSIDE the popup at the redirectUri, this is the call
-  // that hands the code back to the opener and lets MSAL close the popup;
-  // without it the popup just shows the app with #code= in the address bar.
+  // Settle the sign-in response on the load that follows the redirect back
+  // from Entra: this consumes the #code= in the URL, completes the sign-in,
+  // and populates the account. (Epic's SMART return uses ?code= in the query
+  // string, so the two returns never collide.)
   await pca.handleRedirectPromise();
   pcaKey = key;
   const existing = pca.getAllAccounts();
@@ -62,18 +68,23 @@ async function ensurePca(authority, clientId) {
 
 // window.consultologistEntra — the classic app.js calls these.
 window.consultologistEntra = {
-  // Sign in interactively (popup), against the panel's own Entra
-  // registration. authority = https://login.microsoftonline.com/<tenant>.
+  // Sign in against the panel's own Entra registration via a FULL-PAGE
+  // redirect (authority = https://login.microsoftonline.com/<tenant>). This
+  // navigates the tab to Entra and back; the sign-in completes at load via
+  // handleRedirectPromise (see below), which then fires the ready event so
+  // app.js can reflect the signed-in state. Popup flow was abandoned: MSAL
+  // could not reliably close the popup because the redirect page is this
+  // whole app, not a minimal handler. The SMART launch tokens survive the
+  // navigation in sessionStorage, so nothing is lost.
   async signIn(authority, clientId) {
     if (signingIn) {
-      throw new Error("A sign-in is already in progress — finish or close that window first.");
+      throw new Error("A sign-in is already in progress.");
     }
     signingIn = true;
     try {
       await ensurePca(authority, clientId);
-      const result = await pca.loginPopup({ scopes: ["openid", "profile"] });
-      account = result.account;
-      return account?.username ?? account?.name ?? "signed in";
+      await pca.loginRedirect({ scopes: ["openid", "profile"] });
+      // Control does not return here — the tab navigates to Entra.
     } finally {
       signingIn = false;
     }
@@ -88,11 +99,17 @@ window.consultologistEntra = {
     }
     const request = { scopes: [apiScope], account };
     try {
+      // Silent is expected to succeed: the panel's access_as_user permission
+      // is admin-consented tenant-wide, so no interaction is needed once the
+      // account is signed in.
       const silent = await pca.acquireTokenSilent(request);
       return silent.accessToken;
-    } catch {
-      const interactive = await pca.acquireTokenPopup(request);
-      return interactive.accessToken;
+    } catch (error) {
+      // Fall back to a redirect (never a popup — popups don't close on this
+      // static page). This navigates away; on return the token is cached, so
+      // clicking the action again completes silently.
+      await pca.acquireTokenRedirect(request);
+      throw new Error("Consent/interaction was needed — redirecting; click again when you return. (" + error + ")");
     }
   },
 
