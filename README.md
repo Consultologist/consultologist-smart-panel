@@ -41,7 +41,8 @@ Then in the page:
    (record the exact value in the spike record — E1).
 2. **Client ID**: the non-production client id from the registration.
 3. **Scopes** (prefilled):
-   `openid fhirUser launch/patient patient/DocumentReference.read patient/Binary.read`
+   `openid fhirUser launch/patient patient/DocumentReference.rs patient/Binary.r`
+   (SMART v2 scope grammar — the registration declares scope version v2)
 4. **Discover** → **Launch** → sign in with the sandbox test credentials
    the portal documents → the panels fill: token shape, id_token claims
    (JWKS-verified), DocumentReferences, and a Binary fetch with a
