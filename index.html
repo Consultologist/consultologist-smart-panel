@@ -32,6 +32,12 @@
 
   <section id="config">
     <h2>1 &middot; Configuration</h2>
+    <label>EHR provider
+      <select id="provider">
+        <option value="Epic">Epic</option>
+        <option value="Cerner">Cerner (Oracle Health)</option>
+      </select>
+    </label>
     <label>FHIR base URL (R4)
       <input type="text" id="fhirBase" placeholder="https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4" />
     </label>
@@ -81,7 +87,7 @@
       <input type="text" id="apiScope" placeholder="api://&lt;api-client-id&gt;/access_as_user" />
     </label>
     <button id="entraSignInBtn">Sign in to Consultologist</button>
-    <button id="linkEpicBtn" disabled>Link this Epic identity</button>
+    <button id="linkBtn" disabled>Link this identity</button>
     <div id="entraResult" class="muted"></div>
   </section>
 

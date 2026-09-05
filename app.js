@@ -18,7 +18,7 @@ const REDIRECT_URI = window.location.origin + window.location.pathname;
 
 let smartConfig = null;
 let accessToken = null;
-let epicIdToken = null;   // #654: the SMART id_token, POSTed to the link endpoint
+let smartIdToken = null;   // #654: the SMART id_token, POSTed to the link endpoint
 let entraSignedIn = false;
 
 // --- config persistence (convenience only) ---
@@ -36,6 +36,42 @@ for (const key of ["fhirBase", "clientId", "apiBase", "entraAuthority", "entraCl
 }
 
 const fhirBase = () => $("fhirBase").value.trim().replace(/\/$/, "");
+
+// #662: the EHR provider (Epic / Cerner). One panel serves both — the SMART
+// discovery/launch/token/JWKS/document code is EHR-agnostic; the provider only
+// picks the engine link route (Account/{provider}/Link), the field placeholders,
+// and the button label. Persisted like the rest.
+const provider = () => $("provider").value;
+
+const PROVIDER_PREFILL = {
+  Epic: {
+    fhirBase: "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4",
+    clientId: "the non-production client id from fhir.epic.com"
+  },
+  Cerner: {
+    fhirBase: "https://fhir-ehr-code.cerner.com/r4/ec2458f2-1e24-41c8-b71b-0e701af7583d",
+    clientId: "the sandbox client id from code-console.cerner.com"
+  }
+};
+
+function applyProviderPrefill() {
+  const prefill = PROVIDER_PREFILL[provider()] || PROVIDER_PREFILL.Epic;
+  $("fhirBase").placeholder = prefill.fhirBase;
+  $("clientId").placeholder = prefill.clientId;
+  $("linkBtn").textContent = "Link this " + provider() + " identity";
+}
+
+(() => {
+  const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}");
+  if (saved.provider) $("provider").value = saved.provider;
+  applyProviderPrefill();
+  $("provider").addEventListener("change", () => {
+    const next = JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}");
+    next.provider = $("provider").value;
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(next));
+    applyProviderPrefill();
+  });
+})();
 
 // --- discovery ---
 $("discoverBtn").addEventListener("click", async () => {
@@ -101,19 +137,19 @@ $("launchBtn").addEventListener("click", async () => {
     // No fresh SMART return, but a launch earlier THIS tab may have left its
     // tokens in sessionStorage (they survive a reload, are burned on close).
     // Restore them so link/send still work after an incidental reload.
-    const savedAccess = sessionStorage.getItem("epic-access-token");
+    const savedAccess = sessionStorage.getItem("smart-access-token");
     if (savedAccess) {
       accessToken = savedAccess;
       $("docsSection").hidden = false;
-      const savedPatient = sessionStorage.getItem("epic-patient");
+      const savedPatient = sessionStorage.getItem("smart-patient");
       if (savedPatient) $("patientId").value = savedPatient;
     }
-    const savedId = sessionStorage.getItem("epic-id-token");
+    const savedId = sessionStorage.getItem("smart-id-token");
     if (savedId) {
-      epicIdToken = savedId;
+      smartIdToken = savedId;
       await showIdToken(savedId);
       refreshLinkButton();
-      log("restored the Epic id_token from this tab — ready to link");
+      log("restored the SMART id_token from this tab — ready to link");
     }
     return;
   }
@@ -150,7 +186,7 @@ $("launchBtn").addEventListener("click", async () => {
   }
 
   accessToken = token.access_token;
-  sessionStorage.setItem("epic-access-token", accessToken); // survives a same-tab reload; burned on close
+  sessionStorage.setItem("smart-access-token", accessToken); // survives a same-tab reload; burned on close
 
   // The SHAPE, never the tokens: field names, lengths, expiry, context.
   const shape = {};
@@ -165,13 +201,13 @@ $("launchBtn").addEventListener("click", async () => {
 
   if (token.patient) {
     $("patientId").value = token.patient;
-    sessionStorage.setItem("epic-patient", token.patient);
+    sessionStorage.setItem("smart-patient", token.patient);
   }
   $("docsSection").hidden = false;
 
   if (token.id_token) {
-    epicIdToken = token.id_token;
-    sessionStorage.setItem("epic-id-token", epicIdToken); // the link step reads this
+    smartIdToken = token.id_token;
+    sessionStorage.setItem("smart-id-token", smartIdToken); // the link step reads this
     await showIdToken(token.id_token);
     refreshLinkButton();
   } else {
@@ -183,7 +219,7 @@ $("launchBtn").addEventListener("click", async () => {
 const apiBase = () => $("apiBase").value.trim().replace(/\/$/, "");
 
 function refreshLinkButton() {
-  $("linkEpicBtn").disabled = !(entraSignedIn && epicIdToken);
+  $("linkBtn").disabled = !(entraSignedIn && smartIdToken);
 }
 
 // If MSAL already holds a signed-in account (cached this browser), reflect it
@@ -222,19 +258,20 @@ $("entraSignInBtn").addEventListener("click", async () => {
   }
 });
 
-$("linkEpicBtn").addEventListener("click", async () => {
+$("linkBtn").addEventListener("click", async () => {
   try {
     const apiToken = await window.consultologistEntra.getApiToken($("apiScope").value.trim());
-    log("POST " + apiBase() + "/Account/Epic/Link");
-    const response = await fetch(apiBase() + "/Account/Epic/Link", {
+    const linkUrl = apiBase() + "/Account/" + provider() + "/Link";
+    log("POST " + linkUrl);
+    const response = await fetch(linkUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer " + apiToken },
-      body: JSON.stringify({ idToken: epicIdToken })
+      body: JSON.stringify({ idToken: smartIdToken })
     });
     if (response.ok) {
       const body = await response.json();
-      $("entraResult").innerHTML = "Epic identity linked: <strong>" + esc(body.FhirUser ?? body.fhirUser) + "</strong>";
-      log("epic linked: " + (body.FhirUser ?? body.fhirUser));
+      $("entraResult").innerHTML = provider() + " identity linked: <strong>" + esc(body.FhirUser ?? body.fhirUser) + "</strong>";
+      log(provider().toLowerCase() + " linked: " + (body.FhirUser ?? body.fhirUser));
     } else {
       const body = await response.text();
       $("entraResult").innerHTML = "<span class=\"error\">Link refused (HTTP " + esc(response.status) + ")</span>";
@@ -356,7 +393,7 @@ async function fetchAttachment(resource) {
   // exactly these bytes, outside this page.
   const link = document.createElement("a");
   link.href = URL.createObjectURL(new Blob([bytes], { type: contentType }));
-  link.download = "epic-document-" + (resource.id || "unknown");
+  link.download = "smart-document-" + (resource.id || "unknown");
   link.textContent = "Save the bytes";
   $("fetchResult").appendChild(link);
 

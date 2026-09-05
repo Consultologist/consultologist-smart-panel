@@ -10,6 +10,13 @@ and a patient's `DocumentReference` → `Binary` road. When
 Consultologist-Blazor#654 fires, this repo grows into the real satellite
 (the pattern: `docs/SATELLITE_CALLERS.md` there).
 
+Since #662 the panel serves **two EHRs** — pick **Epic** or **Cerner
+(Oracle Health)** from the provider selector in section 1. The SMART
+discovery/launch/token/JWKS/document machinery is EHR-agnostic; the
+selector only sets the field placeholders and the engine link route
+(`Account/{provider}/Link`). Enter the chosen EHR's FHIR base and client
+id and the rest is identical.
+
 Nothing is stored beyond this browser tab and the config fields
 (localStorage, convenience only). Access and id tokens live in tab
 memory; the PKCE verifier and state ride sessionStorage across the
@@ -28,6 +35,23 @@ launch-bound access is the posture (#654's stated boundary).
    Binary read) and enable the OpenID Connect / `fhirUser` option where
    offered.
 5. Save; changes take up to **1 hour** to sync to the sandbox.
+
+## Registering on code-console.cerner.com (once) — #662
+
+1. Create a free **CernerCare** account and open the **code Console**
+   (<https://code-console.cerner.com/console>, the Oracle Health Developer
+   Program).
+2. New app → **provider-facing**, **public** client (SMART on FHIR /
+   OAuth 2.0 with PKCE); a **sandbox (non-production) client ID** is issued
+   separately from production.
+3. Redirect URI: `http://localhost:4180/` (exactly).
+4. Select the DocumentReference read + Binary read scopes (Cerner has **no
+   wildcard scopes** — enumerate them) and enable `openid`/`fhirUser`.
+5. Save; config changes take ~**15 minutes** to propagate. The public
+   provider sandbox FHIR base is
+   `https://fhir-ehr-code.cerner.com/r4/ec2458f2-1e24-41c8-b71b-0e701af7583d`;
+   confirm the exact OIDC issuer from that base's
+   `.well-known/openid-configuration` for the engine's `Cerner__AllowedIssuers`.
 
 ## The Consultologist (Entra) leg — #654
 
@@ -49,11 +73,10 @@ delegated `access_as_user` tenant-wide, append it to the API registration's
 Then, in section 5 of the panel: API base URL, the Entra authority
 (`https://login.microsoftonline.com/<tenant>`), the panel's Entra client
 id, and the API scope (`api://<api-client-id>/access_as_user`); **Sign in
-to Consultologist**, then **Link this Epic identity** (after a SMART launch
-has produced an id_token). Each fetched document offers **Send to
+to Consultologist**, then **Link this <provider> identity** (after a SMART
+launch has produced an id_token). Each fetched document offers **Send to
 Consultologist**, which posts its bytes to the API under the Entra bearer.
 
-## Running
 ## Running
 
 ```bash
