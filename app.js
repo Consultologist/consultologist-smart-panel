@@ -129,6 +129,10 @@ $("launchBtn").addEventListener("click", async () => {
   authorize.searchParams.set("aud", fhirBase());
   authorize.searchParams.set("code_challenge", challenge);
   authorize.searchParams.set("code_challenge_method", "S256");
+  // Force a fresh authorization each launch. Without this an active EHR
+  // session is silently reused along with its PRIOR grant — so a launch that
+  // widens scopes (or needs a patient picker) returns the old, narrower token.
+  authorize.searchParams.set("prompt", "login");
 
   log("scope sent: " + $("scopes").value.trim());
   log("redirecting to authorize…");
