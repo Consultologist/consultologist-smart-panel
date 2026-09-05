@@ -53,9 +53,11 @@ const PROVIDER_PREFILL = {
   Cerner: {
     fhirBase: "https://fhir-ehr-code.cerner.com/r4/ec2458f2-1e24-41c8-b71b-0e701af7583d",
     clientId: "the sandbox client id from code-console.cerner.com",
-    // Cerner enumerates .read (not .rs for DocumentReference) — using the
-    // wrong grammar makes Cerner silently drop the patient scopes.
-    scopes: "openid fhirUser launch/patient patient/DocumentReference.read patient/Binary.read"
+    // Cerner enumerates .read (not .rs for DocumentReference). Provider-wide
+    // user/ scopes rather than patient/ + launch/patient: the sandbox standalone
+    // launch offers no patient picker, so user/ access (query any patient by id)
+    // is the provider-app fit and needs no launch context.
+    scopes: "openid fhirUser user/DocumentReference.read user/Binary.read"
   }
 };
 
