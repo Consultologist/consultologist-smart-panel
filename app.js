@@ -46,11 +46,16 @@ const provider = () => $("provider").value;
 const PROVIDER_PREFILL = {
   Epic: {
     fhirBase: "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4",
-    clientId: "the non-production client id from fhir.epic.com"
+    clientId: "the non-production client id from fhir.epic.com",
+    // Epic accepts SMART v2 granular scopes (.rs = read+search).
+    scopes: "openid fhirUser launch/patient patient/DocumentReference.rs patient/Binary.r"
   },
   Cerner: {
     fhirBase: "https://fhir-ehr-code.cerner.com/r4/ec2458f2-1e24-41c8-b71b-0e701af7583d",
-    clientId: "the sandbox client id from code-console.cerner.com"
+    clientId: "the sandbox client id from code-console.cerner.com",
+    // Cerner enumerates .read (not .rs for DocumentReference) — using the
+    // wrong grammar makes Cerner silently drop the patient scopes.
+    scopes: "openid fhirUser launch/patient patient/DocumentReference.read patient/Binary.read"
   }
 };
 
@@ -58,6 +63,9 @@ function applyProviderPrefill() {
   const prefill = PROVIDER_PREFILL[provider()] || PROVIDER_PREFILL.Epic;
   $("fhirBase").placeholder = prefill.fhirBase;
   $("clientId").placeholder = prefill.clientId;
+  // Scopes are the prefill's to own (not persisted, #190 lesson) — set them to
+  // the selected EHR's grammar so a stale value can't drop the patient scopes.
+  $("scopes").value = prefill.scopes;
   $("linkBtn").textContent = "Link this " + provider() + " identity";
 }
 
